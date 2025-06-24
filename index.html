@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simple CSS Shadow Generator</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Shadowforge CSS Generator</h1>
+        <p>Create beautiful CSS shadows easily</p>
+      </div>
+
+      <div class="main-content">
+        <div class="panel">
+          <h2>Shadow Controls</h2>
+          <div class="control-group">
+            <label for="offsetX">Horizontal Offset (X)</label>
+            <div class="control-row">
+              <input type="range" id="offsetX" min="-50" max="50" value="0" />
+              <input
+                type="number"
+                id="offsetXNum"
+                min="-50"
+                max="50"
+                value="0"
+              />
+              <span>px</span>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label for="offsetY">Vertical Offset (Y)</label>
+            <div class="control-row">
+              <input type="range" id="offsetY" min="-50" max="50" value="10" />
+              <input
+                type="number"
+                id="offsetYNum"
+                min="-50"
+                max="50"
+                value="10"
+              />
+              <span>px</span>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label for="blur">Blur Radius</label>
+            <div class="control-row">
+              <input type="range" id="blur" min="0" max="50" value="15" />
+              <input type="number" id="blurNum" min="0" max="50" value="15" />
+              <span>px</span>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label for="spread">Spread Radius</label>
+            <div class="control-row">
+              <input type="range" id="spread" min="-25" max="25" value="-3" />
+              <input
+                type="number"
+                id="spreadNum"
+                min="-25"
+                max="25"
+                value="-3"
+              />
+              <span>px</span>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label for="shadowColor">Shadow Color</label>
+            <div class="color-control">
+              <input type="color" id="shadowColor" value="#000000" />
+              <input
+                type="text"
+                id="shadowColorHex"
+                value="#000000"
+                placeholder="#000000"
+              />
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label for="opacity">Opacity</label>
+            <div class="control-row">
+              <input
+                type="range"
+                id="opacity"
+                min="0"
+                max="1"
+                step="0.1"
+                value="0.3"
+              />
+              <input
+                type="number"
+                id="opacityNum"
+                min="0"
+                max="1"
+                step="0.1"
+                value="0.3"
+              />
+            </div>
+          </div>
+
+          <div class="control-group">
+            <div class="checkbox-control">
+              <input type="checkbox" id="inset" />
+              <label for="inset">Inner Shadow (Inset)</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Preview</h2>
+
+          <div class="preview-area">
+            <div class="preview-box" id="previewBox">Preview Box</div>
+          </div>
+
+          <div class="css-section">
+            <label for="cssOutput">Generated CSS Code:</label>
+            <textarea id="cssOutput" readonly>
+box-shadow: 0px 10px 15px -3px rgba(0, 0, 0, 0.3);</textarea
+            >
+
+            <div class="button-group">
+              <button class="btn primary" onclick="copyCSS()">Copy CSS</button>
+              <button class="btn secondary" onclick="resetShadow()">
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel presets-section">
+        <h2>Quick Presets</h2>
+        <div class="presets">
+          <button class="preset-btn" onclick="applyPreset('subtle')">
+            <div class="preset-preview subtle-shadow"></div>
+            <span>Subtle</span>
+          </button>
+          <button class="preset-btn" onclick="applyPreset('medium')">
+            <div class="preset-preview medium-shadow"></div>
+            <span>Medium</span>
+          </button>
+          <button class="preset-btn" onclick="applyPreset('large')">
+            <div class="preset-preview large-shadow"></div>
+            <span>Large</span>
+          </button>
+          <button class="preset-btn" onclick="applyPreset('colored')">
+            <div class="preset-preview colored-shadow"></div>
+            <span>Colored</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="success-message" id="successMessage">
+      ✅ CSS copied to clipboard!
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>

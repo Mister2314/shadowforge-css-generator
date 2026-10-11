@@ -1,17 +1,23 @@
-# ShadowForge — CSS Shadow Generator
+<h1 align="center">ShadowForge — CSS Shadow Generator</h1>
 
-**A zero-dependency `box-shadow` generator with live preview and copy-ready CSS output.**
+<p align="center"><b>A zero-dependency `box-shadow` generator with live preview and copy-ready CSS output.</b></p>
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-mister2314.github.io/shadowforge--css--generator-2ea44f?style=flat-square&logo=vercel&logoColor=white)](https://mister2314.github.io/shadowforge-css-generator/)
+<p align="center">
+[![Live Demo](https://img.shields.io/badge/Live_Demo-▶-2ea44f?style=for-the-badge&logo=vercel&logoColor=white)](https://mister2314.github.io/shadowforge-css-generator/)
 ![HTML5](https://img.shields.io/badge/HTML5-e34f26?style=flat-square&logoColor=white)
 ![CSS3](https://img.shields.io/badge/CSS3-1572b6?style=flat-square&logoColor=white)
 ![Vanilla JS](https://img.shields.io/badge/Vanilla_JS-f7df1e?style=flat-square&logoColor=white)
+</p>
+
+<p align="center">[**Live demo**](https://mister2314.github.io/shadowforge-css-generator/) · [Quick start](#quick-start) · [Features](#features) · [Architecture](#architecture) · [FAQ](#faq)</p>
 
 <p align="center">
   <a href="https://mister2314.github.io/shadowforge-css-generator/">
-    <img src="docs/preview.png" alt="ShadowForge — CSS Shadow Generator — desktop preview" width="100%">
+    <img src="docs/demo.gif" alt="ShadowForge — CSS Shadow Generator — animated demo" width="88%">
   </a>
 </p>
+
+<p align="center"><sub>Live capture of the real build — 292 KB, loops forever.</sub></p>
 
 ## Overview
 
@@ -20,6 +26,15 @@
 Every control exists twice — a range slider for feel and a number input for precision — and the two are kept in sync in both directions. The generator covers the full shadow syntax, including spread radius, colour, opacity and the `inset` flag, and updates the preview on every input event.
 
 It is plain HTML, CSS and JavaScript with no build step and no dependencies, which is deliberate: the file you deploy is the file you edit.
+
+## At a glance
+
+| Field | Detail |
+| --- | --- |
+| **Type** | Static site — no build step |
+| **Primary language** | CSS |
+| **Live demo** | [mister2314.github.io/shadowforge-css-generator](https://mister2314.github.io/shadowforge-css-generator/) |
+| **Repository** | [Mister2314/shadowforge-css-generator](https://github.com/Mister2314/shadowforge-css-generator) |
 
 ## Features
 
@@ -40,25 +55,34 @@ It is plain HTML, CSS and JavaScript with no build step and no dependencies, whi
 | Logic | Vanilla JavaScript |
 | Deploy | GitHub Pages |
 
+## Architecture
+
+```mermaid
+flowchart LR
+  A["Range slider"] <-->|two-way bind| B["Number input"]
+  B --> C["Shadow state"]
+  C --> D["Live preview box"]
+  C --> E["CSS string<br/>box-shadow: …"]
+  E --> F["Copy to clipboard"]
+```
+
 ## Screenshots
 
 | Desktop | Mobile |
 | :---: | :---: |
 | <img src="docs/preview.png" alt="Desktop view"> | <img src="docs/preview-mobile.png" alt="Mobile view" width="230"> |
 
-## Getting Started
-
-No build step and no dependencies — clone the repo and open the entry file, or serve the folder locally:
+## Quick Start
 
 ```bash
 git clone https://github.com/Mister2314/shadowforge-css-generator.git
 cd shadowforge-css-generator
 
-# Option 1 — open it directly
+# open it directly
 start index.html      # Windows
 open  index.html      # macOS
 
-# Option 2 — serve it locally
+# or serve the folder
 npx serve .
 ```
 
@@ -69,6 +93,35 @@ index.html — control panel markup and the preview box
 script.js — control registry, two-way binding, CSS generation, clipboard
 style.css — layout, glass panels and control styling
 ```
+
+## FAQ
+
+<details>
+<summary><b>How do the slider and the number box stay in sync?</b></summary>
+
+They write to the same state value and re-render each other. Dragging the slider moves the number; typing a number moves the slider.
+
+</details>
+
+<details>
+<summary><b>Does it support inset shadows?</b></summary>
+
+Yes — the `inset` toggle switches the generated value to an inner shadow, and the preview updates immediately.
+
+</details>
+
+<details>
+<summary><b>Is there a build step?</b></summary>
+
+No. It is three static files. Open `index.html` and it runs.
+
+</details>
+
+## Roadmap
+
+- [ ] Add multi-layer shadow support
+- [ ] Save and share presets via the URL
+- [ ] Add a contrast warning for the chosen shadow colour
 
 ## Notes
 

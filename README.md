@@ -1,10 +1,16 @@
-# ShadowForge — CSS Shadow Generator
+﻿# ShadowForge — CSS Shadow Generator
 
 Zero-dependency `box-shadow` generator with a live preview and copy-ready CSS output.
 
 **Live demo:** https://mister2314.github.io/shadowforge-css-generator/
 
-<img src="docs/preview.png" alt="Desktop view" width="380">
+<div align="center">
+
+| Desktop | Mobile |
+|---|---|
+| <img src="docs/shot-desktop.png" alt="Desktop view" width="700"> | <img src="docs/shot-mobile.png" alt="Mobile view" width="290"> |
+
+</div>
 
 ## What it does
 

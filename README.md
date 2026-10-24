@@ -1,52 +1,67 @@
-# ShadowForge — CSS Shadow Generator
+# Shadowforge — CSS Shadow Instrument
 
-Zero-dependency `box-shadow` generator with a live preview and copy-ready CSS output.
+A box-shadow generator that behaves like a lab instrument: adjust a value, watch the
+specimen settle into place, copy an exact CSS string. No accounts, no tracking, no
+dependencies beyond React itself.
 
-**Live demo:** https://shadowforge-css-generator.vercel.app
-
-<div align="center">
-
-<img src="docs/demo.gif" alt="ShadowForge — CSS Shadow Generator — animated demo" width="700">
-
-| Desktop | Mobile |
-|---|---|
-| <img src="docs/shot-desktop.png" alt="Desktop view" width="700"> | <img src="docs/shot-mobile.png" alt="Mobile view" width="290"> |
-
-<details>
-<summary>More screenshots</summary>
-
-| Desktop | Mobile |
-|---|---|
-| <img src="docs/preview.png" alt="Desktop, alternate view" width="700"> | <img src="docs/preview-mobile.png" alt="Mobile, alternate view" width="290"> |
-
-</details>
-
-</div>
+**Live:** https://shadowforge-css-generator.vercel.app
 
 ## What it does
 
-Turns `box-shadow` into a control panel: drag sliders, watch the preview box re-render on every input event, copy the generated CSS. Each control exists twice — a range slider for feel and a number input for precision — and every pair writes to the same state value and re-renders the other. Three static files, no build step.
+- **Live specimen preview** — the preview box eases toward each value change with a
+  rAF spring (~0.18 lerp), so the shadow feels physically adjusted rather than snapped.
+  The generated CSS string is always computed instantly from the exact state — the
+  animation is display-only and never touches the output.
+- **Layered shadows** — stack up to 6 shadow layers, duplicate, remove, and combine
+  them into one comma-separated `box-shadow`. Layers are additive: a single layer
+  produces the same one-shadow output the tool has always produced.
+- **Keyboard control** — every slider is a native range input: focus it and use ←/→
+  (↑/↓). Visible 2px focus rings on every control. `Ctrl/Cmd+C` copies, `Ctrl/Cmd+R`
+  resets, `Ctrl/Cmd+D` duplicates the active layer.
+- **Shareable state** — the full tool state lives in the URL (`?x=20&y=30&b=15&s=-3&c=000000&o=0.3&i=0`;
+  multi-layer states use `l1x=…&l1y=…&l2x=…`). Send the link, get the exact shadow.
+  Malformed parameters fall back to the stored session or defaults.
+- **Session restore** — state persists to `localStorage` (`shadowforge.session.v1`), so a
+  reload or accidental tab close keeps your work. URL parameters always win over storage.
+- **Copy choreography** — the button confirms with a "Copied ✓" state and a toast slides
+  in with an expo-out ease. All motion is `transform`/`opacity` only.
+- **Reduced motion** — `prefers-reduced-motion: reduce` disables the preview spring and
+  every transition; the page is complete and correct with animation off.
+- **Mobile-first layout** — the specimen panel moves above the controls below 900px,
+  thumb targets are ≥44px, and readouts compress to inline chips. Verified at 390, 768,
+  1440 and 1920px with zero console errors and no horizontal overflow.
 
-## Tech stack
+## The output contract
 
-React 19 · TypeScript · Vite
+The generator's core promise is a **byte-identical output string** for a given input:
 
-## Features
-
-- Sliders and number inputs kept in sync both ways for offset X/Y, blur, spread and opacity
-- Colour picker paired with a hex input
-- `inset` toggle for inner shadows
-- Live preview box that re-renders on every input event
-- Copy-to-clipboard on the generated CSS string
-
-## Run locally
-
-```bash
-git clone https://github.com/Mister2314/shadowforge-css-generator.git
-cd shadowforge-css-generator
-npx serve .        # or just open index.html
+```css
+box-shadow: 0px 10px 15px -3px rgba(0, 0, 0, 0.3);
 ```
 
-## What I learned
+Space-separated values, `rgba(r, g, b, o)` with `", "` separators, `inset ` prefix when
+enabled, trailing semicolon. Multi-layer output joins the same per-layer strings with
+`", "`. If you build on this repo, keep that format stable — tooling and docs may depend
+on it.
 
-The hard part was keeping slider and number input honest: each pair writes to one source of truth and re-renders the other, so dragging moves the number and typing moves the slider — with no feedback loop.
+## Development
+
+```bash
+npm install
+npm run dev       # Vite dev server
+npm run build     # tsc -b + vite build
+npm run preview   # serve the production build
+```
+
+Stack: React 19, TypeScript (strict), Vite 6, plain CSS — no runtime libraries beyond
+React. Deployed on Vercel.
+
+## Architecture notes
+
+- `src/App.tsx` holds the whole tool: state model (`LayerState[]`), URL codec,
+  localStorage codec, spring loop, and the output formatter. The formatter
+  (`layerToShadowString` + join) is the only code allowed to produce output text.
+- Preview animation mirrors numeric values into `displayValues` state; the preview box
+  renders from that mirror, never from the canonical state.
+- The dark-lab visual direction (one violet accent, mono readouts, machined panels)
+  evolved from the original purple-gradient identity rather than replacing it.

@@ -1,8 +1,8 @@
-﻿# ShadowForge — CSS Shadow Generator
+# ShadowForge — CSS Shadow Generator
 
 Zero-dependency `box-shadow` generator with a live preview and copy-ready CSS output.
 
-**Live demo:** https://mister2314.github.io/shadowforge-css-generator/
+**Live demo:** https://shadowforge-css-generator.vercel.app
 
 <div align="center">
 
@@ -18,7 +18,7 @@ Turns `box-shadow` into a control panel: drag sliders, watch the preview box re-
 
 ## Tech stack
 
-HTML5 + CSS3 (grid, custom properties, `backdrop-filter`) + vanilla JS — no dependencies.
+React 19 · TypeScript · Vite
 
 ## Features
 

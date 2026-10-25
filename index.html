@@ -3,9 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f0efe9" media="(prefers-color-scheme: light)" />
     <link rel="icon" href="data:," />
     <title>Shadowforge — CSS Shadow Instrument</title>
-    <meta name="description" content="A dark-lab instrument for crafting layered CSS box-shadows: spring-smoothed preview, shareable URL state, keyboard-first controls." />
+    <meta name="description" content="A lab bench for crafting layered CSS box-shadows: multi-format output (CSS, variables, Tailwind, SCSS), import of existing shadows, shareable URL state, light/dark themes, keyboard-first controls." />
+    <script>
+      // Set theme before first paint to avoid a flash of the wrong theme.
+      (function () {
+        try {
+          var t = localStorage.getItem("shadowforge.theme");
+          if (t !== "dark" && t !== "light") {
+            t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+          }
+          document.documentElement.dataset.theme = t;
+        } catch (e) {
+          document.documentElement.dataset.theme = "dark";
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

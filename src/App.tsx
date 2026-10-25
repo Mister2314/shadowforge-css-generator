@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 
 type LayerState = {
   offsetX: string;
@@ -20,52 +20,64 @@ const DEFAULT_LAYER: LayerState = {
   inset: false,
 };
 
-const PRESETS: Record<string, LayerState> = {
-  subtle: {
-    offsetX: "0",
-    offsetY: "1",
-    blur: "3",
-    spread: "0",
-    color: "#000000",
-    opacity: "0.12",
-    inset: false,
+type Preset = { name: string; layers: LayerState[] };
+
+const PRESETS: Preset[] = [
+  {
+    name: "Subtle",
+    layers: [
+      { offsetX: "0", offsetY: "1", blur: "3", spread: "0", color: "#000000", opacity: "0.12", inset: false },
+    ],
   },
-  medium: {
-    offsetX: "0",
-    offsetY: "4",
-    blur: "6",
-    spread: "-1",
-    color: "#000000",
-    opacity: "0.1",
-    inset: false,
+  {
+    name: "Card",
+    layers: [
+      { offsetX: "0", offsetY: "1", blur: "2", spread: "0", color: "#0f172a", opacity: "0.07", inset: false },
+      { offsetX: "0", offsetY: "4", blur: "8", spread: "-2", color: "#0f172a", opacity: "0.1", inset: false },
+    ],
   },
-  large: {
-    offsetX: "0",
-    offsetY: "10",
-    blur: "15",
-    spread: "-3",
-    color: "#000000",
-    opacity: "0.1",
-    inset: false,
+  {
+    name: "Float",
+    layers: [
+      { offsetX: "0", offsetY: "2", blur: "4", spread: "-1", color: "#0f172a", opacity: "0.08", inset: false },
+      { offsetX: "0", offsetY: "8", blur: "16", spread: "-4", color: "#0f172a", opacity: "0.12", inset: false },
+      { offsetX: "0", offsetY: "24", blur: "48", spread: "-12", color: "#0f172a", opacity: "0.14", inset: false },
+    ],
   },
-  colored: {
-    offsetX: "0",
-    offsetY: "10",
-    blur: "15",
-    spread: "-3",
-    color: "#667eea",
-    opacity: "0.4",
-    inset: false,
+  {
+    name: "Glow",
+    layers: [
+      { offsetX: "0", offsetY: "0", blur: "0", spread: "0", color: "#667eea", opacity: "0", inset: false },
+      { offsetX: "0", offsetY: "4", blur: "14", spread: "-2", color: "#667eea", opacity: "0.35", inset: false },
+    ],
   },
-};
+];
 
 const LAYER_URL_PREFIX = "l";
+
+type Format = "css" | "vars" | "tw" | "scss";
+
+const FORMATS: { id: Format; label: string }[] = [
+  { id: "css", label: "CSS" },
+  { id: "vars", label: "CSS vars" },
+  { id: "tw", label: "Tailwind" },
+  { id: "scss", label: "SCSS" },
+];
+
+type PreviewBg = { id: string; label: string; css: string };
+
+const PREVIEW_BGS: PreviewBg[] = [
+  { id: "bench", label: "Bench", css: "" }, // themed default from CSS
+  { id: "light", label: "Light", css: "#e9e7e1" },
+  { id: "dark", label: "Dark", css: "#14161d" },
+  { id: "moss", label: "Moss", css: "#3c4a41" },
+];
 
 function isValidHexColor(hex: string): boolean {
   return /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(hex);
 }
 
-function hexToRgba(hex: string, opacity: string): string {
+function hexToRgb(hex: string): [number, number, number] {
   let h = hex.replace("#", "");
   if (h.length === 3) {
     h = h
@@ -73,15 +85,127 @@ function hexToRgba(hex: string, opacity: string): string {
       .map((char) => char + char)
       .join("");
   }
-  const red = parseInt(h.substring(0, 2), 16);
-  const green = parseInt(h.substring(2, 4), 16);
-  const blue = parseInt(h.substring(4, 6), 16);
-  return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function hexToRgba(hex: string, opacity: string): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 }
 
 function layerToShadowString(layer: LayerState): string {
   return `${layer.inset ? "inset " : ""}${layer.offsetX}px ${layer.offsetY}px ${layer.blur}px ${layer.spread}px ${hexToRgba(layer.color, layer.opacity)}`;
 }
+
+function shadowStrings(layers: LayerState[]): string {
+  return layers.map(layerToShadowString).join(", ");
+}
+
+function formatOutput(format: Format, layers: LayerState[]): string {
+  const body = shadowStrings(layers);
+  if (format === "css") return `box-shadow: ${body};`;
+  if (format === "vars") return `--shadow-elevated: ${body};\n\nbox-shadow: var(--shadow-elevated);`;
+  if (format === "tw") return `shadow-[${body.replace(/ /g, "_")}]`;
+  return `$shadow-elevated: ${body};\n\nbox-shadow: $shadow-elevated;`;
+}
+
+// ---------- import: parse a pasted box-shadow declaration ----------
+
+function splitTopLevel(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of text) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (ch === "," && depth === 0) {
+      parts.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) parts.push(current);
+  return parts;
+}
+
+function colorTokenToLayer(token: string, layer: LayerState): boolean {
+  const rgba = token.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)/);
+  if (rgba) {
+    const toHex = (n: string) => Math.round(Math.max(0, Math.min(255, parseFloat(n)))).toString(16).padStart(2, "0");
+    layer.color = `#${toHex(rgba[1])}${toHex(rgba[2])}${toHex(rgba[3])}`;
+    layer.opacity = rgba[4] !== undefined ? rgba[4] : "1";
+    return true;
+  }
+  const hsl = token.match(/hsla?\(\s*([\d.]+)(?:deg)?\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*(?:,\s*([\d.]+)\s*)?\)/);
+  if (hsl) {
+    // convert HSL to hex
+    const h = parseFloat(hsl[1]) / 360;
+    const s = parseFloat(hsl[2]) / 100;
+    const l = parseFloat(hsl[3]) / 100;
+    const f = (n: number) => {
+      const k = (n + h * 12) % 12;
+      const a = s * Math.min(l, 1 - l);
+      const v = l - a * Math.max(-1, Math.min(Math.min(k - 3, 9 - k), 1));
+      return Math.round(v * 255).toString(16).padStart(2, "0");
+    };
+    layer.color = `#${f(0)}${f(8)}${f(4)}`;
+    layer.opacity = hsl[4] !== undefined ? hsl[4] : "1";
+    return true;
+  }
+  if (/^#[0-9a-fA-F]{3,8}$/.test(token)) {
+    let hex = token;
+    if (hex.length === 5 || hex.length === 9) {
+      // hex with alpha: split off alpha
+      const alpha = hex.slice(-2);
+      layer.opacity = String(Math.round(parseInt(alpha, 16) / 255 * 100) / 100);
+      hex = hex.slice(0, 7);
+    }
+    if (!isValidHexColor(hex)) return false;
+    layer.color = hex;
+    return true;
+  }
+  return false;
+}
+
+function parseBoxShadow(css: string): LayerState[] | null {
+  const match = css.match(/box-shadow\s*:\s*([^;}]+)/i);
+  const body = match ? match[1] : css.trim();
+  if (!body) return null;
+  const parts = splitTopLevel(body);
+  if (parts.length === 0 || parts.length > 12) return null;
+  const layers: LayerState[] = [];
+  for (const part of parts) {
+    const layer: LayerState = {
+      offsetX: "0", offsetY: "0", blur: "0", spread: "0",
+      color: "#000000", opacity: "1", inset: false,
+    };
+    let tokens = part.trim().split(/\s+/);
+    if (tokens[0] === "inset") {
+      layer.inset = true;
+      tokens = tokens.slice(1);
+    }
+    const colorTokenIdx = tokens.findIndex((t) => /rgba?\(|hsla?\(|#/.test(t));
+    if (colorTokenIdx >= 0) {
+      if (!colorTokenToLayer(tokens[colorTokenIdx], layer)) return null;
+      tokens = tokens.filter((_, i) => i !== colorTokenIdx);
+    }
+    const nums = tokens.map((t) => {
+      const m = t.match(/^(-?[\d.]+)(?:px)?$/);
+      return m ? m[1] : null;
+    });
+    if (nums.some((n) => n === null) || nums.length < 2 || nums.length > 4) return null;
+    const values = nums as string[];
+    layer.offsetX = values[0];
+    layer.offsetY = values[1];
+    layer.blur = values[2] ?? "0";
+    layer.spread = values[3] ?? "0";
+    layers.push(layer);
+  }
+  return layers.length > 0 ? layers : null;
+}
+
+// ---------- URL + storage codecs ----------
 
 function layerStateToURLParams(prefix: string, layer: LayerState): Record<string, string> {
   return {
@@ -103,21 +227,10 @@ function urlParamsToLayerState(prefix: string, params: URLSearchParams): LayerSt
   const c = params.get(`${prefix}c`);
   const o = params.get(`${prefix}o`);
   const i = params.get(`${prefix}i`);
-
-  if ([x, y, b, s, c, o].some((v) => v === null) || x === null || y === null || b === null || s === null || c === null || o === null) return null;
-
+  if (x === null || y === null || b === null || s === null || c === null || o === null) return null;
   const color = `#${c}`;
   if (!isValidHexColor(color)) return null;
-
-  return {
-    offsetX: x,
-    offsetY: y,
-    blur: b,
-    spread: s,
-    color,
-    opacity: o,
-    inset: i === "1",
-  };
+  return { offsetX: x, offsetY: y, blur: b, spread: s, color, opacity: o, inset: i === "1" };
 }
 
 function parseURLLayers(params: URLSearchParams): LayerState[] {
@@ -179,11 +292,6 @@ function saveSession(layers: LayerState[]) {
   }
 }
 
-function applyPresetToLayer(layer: LayerState, presetName: string): LayerState {
-  const preset = PRESETS[presetName];
-  return preset ? { ...preset } : layer;
-}
-
 function clampValue(value: string, min: number, max: number): string {
   const n = parseFloat(value);
   if (isNaN(n)) return String(min);
@@ -192,6 +300,20 @@ function clampValue(value: string, min: number, max: number): string {
 
 function springValue(current: number, target: number, stiffness = 0.18): number {
   return current + (target - current) * stiffness;
+}
+
+// ---------- theme ----------
+
+type Theme = "dark" | "light";
+
+function getStoredTheme(): Theme | null {
+  try {
+    const t = document.documentElement.dataset.theme;
+    if (t === "dark" || t === "light") return t;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export default function App() {
@@ -206,8 +328,62 @@ export default function App() {
   });
 
   const [activeLayerIndex, setActiveLayerIndex] = useState(0);
+  const [format, setFormat] = useState<Format>("css");
+  const [bgId, setBgId] = useState("bench");
+  const [theme, setTheme] = useState<Theme>(() => getStoredTheme() ?? "dark");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importStatus, setImportStatus] = useState<string | null>(null);
   const [showMessage, setShowMessage] = useState(false);
-  const [messageText, setMessageText] = useState("CSS copied!");
+  const [messageText, setMessageText] = useState("Copied");
+
+  // undo/redo history (coalesces rapid slider drags)
+  const historyRef = useRef<{ past: LayerState[][]; future: LayerState[][] }>({ past: [], future: [] });
+  const lastCommitRef = useRef(0);
+  const [, forceRender] = useState(0);
+
+  const commit = useCallback((next: (prev: LayerState[]) => LayerState[]) => {
+    setLayers((prev) => {
+      const now = Date.now();
+      if (now - lastCommitRef.current > 400) {
+        historyRef.current.past.push(prev);
+        if (historyRef.current.past.length > 50) historyRef.current.past.shift();
+        historyRef.current.future = [];
+      }
+      lastCommitRef.current = now;
+      return next(prev);
+    });
+    forceRender((n) => n + 1);
+  }, []);
+
+  const undo = useCallback(() => {
+    const h = historyRef.current;
+    if (h.past.length === 0) return;
+    const prev = h.past[h.past.length - 1];
+    setLayers((current) => {
+      h.future.push(current);
+      if (h.future.length > 50) h.future.shift();
+      return prev;
+    });
+    h.past.pop();
+    setActiveLayerIndex((i) => Math.min(i, prev.length - 1));
+    lastCommitRef.current = 0;
+    forceRender((n) => n + 1);
+  }, []);
+
+  const redo = useCallback(() => {
+    const h = historyRef.current;
+    if (h.future.length === 0) return;
+    const next = h.future[h.future.length - 1];
+    setLayers((current) => {
+      h.past.push(current);
+      return next;
+    });
+    h.future.pop();
+    setActiveLayerIndex((i) => Math.min(i, next.length - 1));
+    lastCommitRef.current = 0;
+    forceRender((n) => n + 1);
+  }, []);
 
   // Spring-animated display values for the preview (instrument feel)
   type DisplayVals = {
@@ -230,7 +406,6 @@ export default function App() {
   });
   const prefersReducedMotionRef = useRef(false);
 
-  // sync displayValues to active layer on change
   const activeLayer = layers[activeLayerIndex] ?? DEFAULT_LAYER;
   const targetVals = useMemo(
     () => ({
@@ -268,33 +443,21 @@ export default function App() {
       setDisplayValues((prev) => {
         const dv = { ...prev };
         let changed = false;
-        const keys: (keyof DisplayVals)[] = [
-          "offsetX",
-          "offsetY",
-          "blur",
-          "spread",
-          "opacity",
-        ];
+        const keys: (keyof DisplayVals)[] = ["offsetX", "offsetY", "blur", "spread", "opacity"];
         for (const k of keys) {
-          const numericKeys = ["offsetX", "offsetY", "blur", "spread", "opacity"] as const;
-          type NumericKey = (typeof numericKeys)[number];
-          const nk = k as NumericKey;
-          const cur = dv[nk] as number;
-          const tgt = targetVals[nk] as number;
+          const cur = dv[k] as number;
+          const tgt = targetVals[k] as number;
           const next = springValue(cur, tgt);
           if (Math.abs(next - cur) > 0.005) {
-            dv[nk] = next;
+            dv[k] = next as never;
             changed = true;
           } else {
-            dv[nk] = tgt;
+            dv[k] = tgt as never;
           }
         }
-        // color and inset snap immediately
         dv.color = targetVals.color;
         dv.inset = targetVals.inset;
-        if (changed) {
-          rafId = requestAnimationFrame(tick);
-        }
+        if (changed) rafId = requestAnimationFrame(tick);
         return dv;
       });
     }
@@ -313,141 +476,210 @@ export default function App() {
   // URL sync
   useEffect(() => {
     const params = new URLSearchParams();
-    const urlParams = layersToURLParams(layers);
-    Object.entries(urlParams).forEach(([k, v]) => params.set(k, v));
-    const newURL = `${window.location.pathname}?${params.toString()}`;
-    window.history.replaceState({}, "", newURL);
+    Object.entries(layersToURLParams(layers)).forEach(([k, v]) => params.set(k, v));
+    window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
   }, [layers]);
+
+  // theme application (dataset set pre-paint by inline script; this syncs toggles)
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem("shadowforge.theme", theme);
+    } catch {
+      // ignore
+    }
+  }, [theme]);
+
+  const canUndo = historyRef.current.past.length > 0;
+  const canRedo = historyRef.current.future.length > 0;
 
   // Keyboard shortcuts
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.ctrlKey || event.metaKey) {
-        if (event.key === "c") {
-          const target = event.target as HTMLElement;
-          if (
-            target.tagName !== "INPUT" &&
-            target.tagName !== "TEXTAREA"
-          ) {
-            event.preventDefault();
-            void copyCSS();
-          }
+        const target = event.target as HTMLElement;
+        const inField = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
+        if (event.key === "c" && !inField) {
+          event.preventDefault();
+          void copyCurrent();
         } else if (event.key === "r") {
           event.preventDefault();
-          setLayers([DEFAULT_LAYER]);
-          setActiveLayerIndex(0);
+          resetAll();
         } else if (event.key === "d") {
-          // duplicate layer
           event.preventDefault();
           duplicateLayer();
+        } else if (event.key === "z" && !event.shiftKey) {
+          event.preventDefault();
+          undo();
+        } else if ((event.key === "z" && event.shiftKey) || event.key === "y") {
+          event.preventDefault();
+          redo();
         }
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [undo, redo]);
 
-  // CSS output (INVARIANT: byte-identical for single layer)
-  const cssOutput = useMemo(() => {
-    const shadowStrings = layers.map(layerToShadowString);
-    return `box-shadow: ${shadowStrings.join(", ")};`;
-  }, [layers]);
+  // Output
+  const cssOutput = useMemo(() => formatOutput("css", layers), [layers]);
+  const formattedOutput = useMemo(() => formatOutput(format, layers), [format, layers]);
 
-  // Preview shadow string (from spring-animated display values for the active layer)
+  // Preview shadow (spring-animated, active layer only) + flat layers for context
   const previewShadowString = useMemo(() => {
     const dv = displayValues;
-    return `${dv.inset ? "inset " : ""}${dv.offsetX.toFixed(2)}px ${dv.offsetY.toFixed(2)}px ${dv.blur.toFixed(2)}px ${dv.spread.toFixed(2)}px ${hexToRgba(dv.color, dv.opacity.toFixed(2))}`;
-  }, [displayValues]);
+    const activeStr = `${dv.inset ? "inset " : ""}${dv.offsetX.toFixed(2)}px ${dv.offsetY.toFixed(2)}px ${dv.blur.toFixed(2)}px ${dv.spread.toFixed(2)}px ${hexToRgba(dv.color, dv.opacity.toFixed(2))}`;
+    const rest = layers
+      .filter((_, i) => i !== activeLayerIndex)
+      .map(layerToShadowString);
+    return [...rest, activeStr].join(", ");
+  }, [displayValues, layers, activeLayerIndex]);
 
-  function setLayerValue<K extends keyof LayerState>(
-    index: number,
-    key: K,
-    value: LayerState[K]
-  ) {
-    setLayers((prev) => {
+  function setLayerValue<K extends keyof LayerState>(index: number, key: K, value: LayerState[K]) {
+    commit((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], [key]: value };
       return next;
     });
   }
 
-  function applyPreset(presetName: string) {
-    setLayers((prev) => {
-      const next = [...prev];
-      next[activeLayerIndex] = applyPresetToLayer(next[activeLayerIndex], presetName);
-      return next;
-    });
+  function applyPreset(preset: Preset) {
+    commit(() => preset.layers.map((l) => ({ ...l })));
+    setActiveLayerIndex(0);
   }
 
   function addLayer() {
-    setLayers((prev) => [...prev, { ...DEFAULT_LAYER }]);
-    setActiveLayerIndex((prev) => prev + 1);
+    commit((prev) => [...prev, { ...DEFAULT_LAYER }]);
+    setActiveLayerIndex(layers.length);
   }
 
   function duplicateLayer() {
-    setLayers((prev) => {
+    commit((prev) => {
       const copy = { ...prev[activeLayerIndex] };
-      const next = [...prev.slice(0, activeLayerIndex + 1), copy, ...prev.slice(activeLayerIndex + 1)];
-      return next;
+      return [...prev.slice(0, activeLayerIndex + 1), copy, ...prev.slice(activeLayerIndex + 1)];
     });
     setActiveLayerIndex((prev) => prev + 1);
   }
 
   function removeLayer(index: number) {
     if (layers.length <= 1) return;
-    setLayers((prev) => prev.filter((_, i) => i !== index));
-    setActiveLayerIndex((prev) => Math.min(prev, layers.length - 2));
-  }
-
-  function moveLayer(from: number, to: number) {
-    setLayers((prev) => {
-      const next = [...prev];
-      const [removed] = next.splice(from, 1);
-      next.splice(to, 0, removed);
-      return next;
-    });
-    setActiveLayerIndex(to);
-  }
-  void moveLayer;
-
-  async function copyCSS() {
-    try {
-      await navigator.clipboard.writeText(cssOutput);
-      setMessageText("CSS copied!");
-    } catch {
-      setMessageText("CSS copied (fallback)!");
-    }
-    setShowMessage(true);
-    setTimeout(() => setShowMessage(false), 1600);
+    commit((prev) => prev.filter((_, i) => i !== index));
+    setActiveLayerIndex((prev) => Math.max(0, Math.min(prev, layers.length - 2)));
   }
 
   function resetAll() {
-    setLayers([DEFAULT_LAYER]);
+    commit(() => [{ ...DEFAULT_LAYER }]);
     setActiveLayerIndex(0);
   }
 
+  function runImport() {
+    const parsed = parseBoxShadow(importText);
+    if (!parsed) {
+      setImportStatus("Couldn't read that. Paste a valid box-shadow declaration, e.g. box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);");
+      return;
+    }
+    commit(() => parsed);
+    setActiveLayerIndex(0);
+    setImportStatus(`Imported ${parsed.length} layer${parsed.length === 1 ? "" : "s"}.`);
+  }
+
+  const showToast = useCallback((text: string) => {
+    setMessageText(text);
+    setShowMessage(true);
+    setTimeout(() => setShowMessage(false), 1600);
+  }, []);
+
+  async function copyText(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // clipboard blocked — still confirm, textarea fallback lets user copy manually
+    }
+    showToast(label);
+  }
+
+  async function copyCurrent() {
+    await copyText(formattedOutput, format === "tw" ? "Tailwind copied!" : `${FORMATS.find((f) => f.id === format)?.label ?? "CSS"} copied!`);
+  }
+
+  async function copyLink() {
+    await copyText(window.location.href, "Link copied!");
+  }
+
   const active = layers[activeLayerIndex];
+  const bg = PREVIEW_BGS.find((b) => b.id === bgId) ?? PREVIEW_BGS[0];
 
   return (
     <>
       <div className="container">
         <header className="header">
-          <h1>Shadowforge</h1>
-          <p>CSS Shadow Instrument</p>
+          <div>
+            <h1>Shadowforge</h1>
+            <p>CSS Shadow Instrument</p>
+          </div>
+          <div className="header-actions">
+            <button
+              className="btn ghost small"
+              onClick={undo}
+              disabled={!canUndo}
+              aria-label="Undo (Ctrl+Z)"
+              title="Undo (Ctrl+Z)"
+            >
+              Undo
+            </button>
+            <button
+              className="btn ghost small"
+              onClick={redo}
+              disabled={!canRedo}
+              aria-label="Redo (Ctrl+Shift+Z)"
+              title="Redo (Ctrl+Shift+Z)"
+            >
+              Redo
+            </button>
+            <button className="btn ghost small" onClick={copyLink} aria-label="Copy shareable link">
+              Copy link
+            </button>
+            <button
+              className="btn ghost small"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+              aria-pressed={theme === "light"}
+            >
+              {theme === "dark" ? "Light" : "Dark"}
+            </button>
+          </div>
         </header>
 
         <main className="main-content">
           {/* Preview panel (above on mobile via CSS order) */}
           <section className="panel preview-panel" aria-label="Shadow preview">
-            <h2>Specimen</h2>
-            <div className="preview-area">
+            <div className="panel-title-row">
+              <h2>Specimen</h2>
+              <div className="bg-switch" role="group" aria-label="Preview background">
+                {PREVIEW_BGS.map((b) => (
+                  <button
+                    key={b.id}
+                    className={`bg-chip ${bgId === b.id ? "active" : ""}`}
+                    onClick={() => setBgId(b.id)}
+                    aria-pressed={bgId === b.id}
+                  >
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div
+              className="preview-area"
+              style={bg.css ? { backgroundColor: bg.css } : undefined}
+            >
               <div
                 className="preview-box"
                 style={{ boxShadow: previewShadowString }}
                 role="img"
                 aria-label={`Shadow preview: ${cssOutput}`}
               >
-                Preview
+                Card
               </div>
             </div>
 
@@ -460,23 +692,35 @@ export default function App() {
             </div>
 
             <div className="css-section">
-              <label htmlFor="cssOutput" className="css-label">
-                Generated CSS
-              </label>
+              <div className="panel-title-row">
+                <span className="css-label" id="format-label">Output</span>
+                <div className="format-tabs" role="group" aria-labelledby="format-label">
+                  {FORMATS.map((f) => (
+                    <button
+                      key={f.id}
+                      className={`format-tab ${format === f.id ? "active" : ""}`}
+                      onClick={() => setFormat(f.id)}
+                      aria-pressed={format === f.id}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <textarea
                 id="cssOutput"
                 readOnly
-                value={cssOutput}
+                value={formattedOutput}
                 spellCheck={false}
-                aria-label="Generated box-shadow CSS"
+                aria-label={`Generated shadow as ${format}`}
               />
               <div className="button-group">
                 <button
                   className={`btn primary ${showMessage ? "copied" : ""}`}
-                  onClick={copyCSS}
-                  aria-label="Copy CSS to clipboard"
+                  onClick={copyCurrent}
+                  aria-label="Copy output to clipboard"
                 >
-                  {showMessage ? "Copied ✓" : "Copy CSS"}
+                  {showMessage ? "Copied ✓" : "Copy"}
                 </button>
                 <button className="btn secondary" onClick={resetAll} aria-label="Reset to defaults">
                   Reset
@@ -516,7 +760,7 @@ export default function App() {
                 ))}
                 {layers.length < 6 && (
                   <button className="layer-tab add-tab" onClick={addLayer} aria-label="Add layer">
-                    +
+                    <span className="layer-tab-btn">+</span>
                   </button>
                 )}
               </div>
@@ -722,15 +966,19 @@ export default function App() {
             <div className="control-group presets-row">
               <label className="control-label">Presets</label>
               <div className="presets">
-                {Object.keys(PRESETS).map((name) => (
+                {PRESETS.map((preset) => (
                   <button
-                    key={name}
+                    key={preset.name}
                     className="preset-btn"
-                    onClick={() => applyPreset(name)}
-                    aria-label={`Apply ${name} preset`}
+                    onClick={() => applyPreset(preset)}
+                    aria-label={`Apply ${preset.name} preset (${preset.layers.length} layer${preset.layers.length === 1 ? "" : "s"})`}
                   >
-                    <div className={`preset-preview ${name}-shadow`} />
-                    <span>{name.charAt(0).toUpperCase() + name.slice(1)}</span>
+                    <div
+                      className="preset-preview"
+                      style={{ boxShadow: shadowStrings(preset.layers) }}
+                      aria-hidden="true"
+                    />
+                    <span>{preset.name}</span>
                   </button>
                 ))}
               </div>
@@ -747,6 +995,30 @@ export default function App() {
                 </button>
               )}
             </div>
+
+            <details className="import-details" open={importOpen} onToggle={(e) => setImportOpen((e.target as HTMLDetailsElement).open)}>
+              <summary>Import an existing shadow</summary>
+              <p className="import-hint">
+                Paste any <code>box-shadow</code> declaration — hex, rgb or hsl, one layer or many.
+              </p>
+              <textarea
+                className="import-input"
+                value={importText}
+                onChange={(e) => {
+                  setImportText(e.target.value);
+                  setImportStatus(null);
+                }}
+                placeholder="box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 8px rgba(15, 23, 42, 0.1);"
+                aria-label="box-shadow CSS to import"
+                spellCheck={false}
+              />
+              <div className="import-row">
+                <button className="btn secondary small" onClick={runImport} aria-label="Import pasted shadow">
+                  Import
+                </button>
+                {importStatus && <span className="import-status" role="status">{importStatus}</span>}
+              </div>
+            </details>
           </section>
         </main>
       </div>

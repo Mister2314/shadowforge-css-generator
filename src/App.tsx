@@ -519,7 +519,6 @@ export default function App() {
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [undo, redo]);
 
   // Output
